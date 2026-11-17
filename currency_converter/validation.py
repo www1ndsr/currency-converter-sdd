@@ -39,14 +39,14 @@ def parse_and_validate_amount(raw_text: Optional[str]) -> Decimal:
     if not cleaned:
         raise ValidationError("Amount is required. Please enter a positive number.")
 
-    # Check for negative amounts explicitly
-    if cleaned.startswith("-"):
-        raise ValidationError("Amount must be greater than zero. Negative numbers are not accepted.")
-
     # Check for NaN or Infinity representations
     lower_val = cleaned.lower()
     if "nan" in lower_val or "inf" in lower_val:
         raise ValidationError("Amount must be a valid finite number.")
+
+    # Check for negative amounts explicitly
+    if cleaned.startswith("-"):
+        raise ValidationError("Amount must be greater than zero. Negative numbers are not accepted.")
 
     # Check decimal separators
     comma_count = cleaned.count(",")
