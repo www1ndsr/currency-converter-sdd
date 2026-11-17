@@ -1,0 +1,6 @@
+"""Application entry point scaffold."""
+
+from currency_converter.app import main
+
+if __name__ == "__main__":
+    main()

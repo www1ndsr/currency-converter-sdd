@@ -1,0 +1,26 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local cache & data
+*.cache.json
+currency_rates_cache.json
+.cache/
+
+# IDE & OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
