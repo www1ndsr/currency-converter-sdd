@@ -8,6 +8,26 @@
 
 **Input**: User description: "A desktop currency conversion application using official exchange rates from the National Bank of Moldova."
 
+## Clarifications
+
+### Session 2026-11-17
+
+- Q: How far backward should the application search when the requested date has no rates?
+  A: Search backward for up to 14 calendar days.
+- Q: What should happen when the network is unavailable and a valid cache exists?
+  A: Automatically use the cache and clearly label it as cached.
+- Q: How should the application identify the actual effective rate date?
+  A: Use the effective date represented in the successfully parsed BNM XML response, not the
+  originally requested date.
+- Q: How should malformed or partially valid XML responses be handled?
+  A: Reject the entire response unless every required response field needed for the rate set is
+  valid; never mix partial XML entries with cached or other response data.
+- Q: How should decimal commas and decimal points be handled in user input?
+  A: Accept both comma and period decimal separators. A decimal separator must be followed by
+  digits, and mixed or invalid separators must be rejected.
+- Q: Which deterministic rounding rule should be used for the displayed two-decimal result?
+  A: Use Decimal `ROUND_HALF_UP`; do not round intermediate rates or calculations.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Convert an Amount (Priority: P1)
@@ -78,7 +98,7 @@ verify that the latest cache is offered or used and its effective date is displa
    names, nominal values, normalized rates, source, effective date, and retrieval state are
    available for conversion.
 2. **Given** network is unavailable and a valid cache exists, **When** rates are requested, **Then**
-   the application offers or automatically uses the cache and visibly labels it as cached.
+   the application automatically uses the cache and visibly labels it as cached.
 3. **Given** a valid cache exists, **When** the application is restarted, **Then** cached rates
    remain available for conversion without a live network request.
 4. **Given** live rates are displayed, **When** the rate state is shown, **Then** the application
@@ -106,8 +126,9 @@ that the application searches backward and displays the effective date of the re
 2. **Given** the requested date is a weekend or public holiday, **When** no current response exists,
    **Then** the application uses the latest available previous rate and informs the user that the
    displayed date differs from the requested date.
-3. **Given** no valid response is found within the documented backward-search limit, **When** a valid
-   cache exists, **Then** the application may use the cache and clearly label it as cached.
+3. **Given** no valid response is found within the 14-calendar-day backward-search limit, **When**
+   a valid cache exists, **Then** the application automatically uses the cache and clearly labels
+   it as cached.
 4. **Given** no valid response or cache exists within the search period, **When** data loading
    finishes, **Then** the application shows a clear error without crashing.
 
@@ -142,12 +163,13 @@ validation feedback, result area, effective date, source, and cache/live state.
 
 - The amount contains surrounding whitespace; leading or trailing whitespace is accepted only if
   the remaining text is a valid numeric amount.
-- The amount uses an invalid decimal separator or contains mixed separators; it is rejected with
-  an understandable format message.
+- Period and comma decimal separators are accepted. Mixed separators, separators that do not precede
+  digits, multiple separators, and invalid numeric text are rejected with an understandable format
+  message.
 - The amount is extremely large or exceeds the supported calculation range; it is rejected without
   crashing or losing precision.
-- The same currency is selected; no exchange operation or error occurs beyond normal amount
-  validation.
+- The same currency is selected; no network operation or exchange-rate lookup is required. The
+  application validates the amount and returns the amount rounded to two decimal places.
 - BNM omits MDL or another supported currency; the application handles the missing entry safely.
 - BNM returns zero, negative, malformed, or non-finite nominal or exchange values; the application
   rejects those values.
@@ -177,31 +199,38 @@ validation feedback, result area, effective date, source, and cache/live state.
   XML response.
 - **FR-006**: The application MUST include MDL as a base currency with a normalized rate of 1.
 - **FR-007**: The application MUST normalize each official rate as `value divided by nominal`.
+  For example, a nominal of 10 and value of 19.50 produces a normalized MDL-per-unit rate of 1.95.
 - **FR-008**: The application MUST support conversion in both directions and between any two
   currencies included in a valid loaded rate set.
 - **FR-009**: The application MUST calculate conversions as
   `amount_in_target = amount * source_rate / target_rate`.
 - **FR-010**: The application MUST use precise decimal arithmetic and display the converted result
-  rounded to two decimal places.
+  rounded to two decimal places using Decimal `ROUND_HALF_UP`. It MUST NOT round intermediate rates
+  or calculations.
 - **FR-011**: The application MUST return the entered amount, rounded consistently to two decimal
-  places, for same-currency conversion without an error.
-- **FR-012**: The application MUST display the effective date of the rate set actually used.
+  places, for same-currency conversion without an error or network access.
+- **FR-012**: The application MUST derive and display the effective date from the successful BNM
+  XML response actually used, not solely from the requested date. For same-currency conversion
+  completed without using rate data, it MUST identify the effective rate date as not applicable.
 - **FR-013**: The application MUST identify the National Bank of Moldova as the data source.
 - **FR-014**: The application MUST reject an empty amount with a clear validation message.
 - **FR-015**: The application MUST reject alphabetic text, invalid numeric formats, zero, negative
-  values, NaN, and infinity.
+  values, NaN, and infinity. It MUST accept period or comma as the decimal separator, provided the
+  separator is used once and is followed by digits.
 - **FR-016**: A network failure MUST NOT crash the application.
 - **FR-017**: When network access is unavailable and a previously successful rate response is
-  cached, the application MUST offer or automatically use it and clearly display its effective
-  date.
+  cached, the application MUST automatically use it and clearly display it as cached with its
+  effective date.
 - **FR-018**: When network access is unavailable and no valid cache exists, the application MUST
   display an understandable error and remain operational.
 - **FR-019**: If BNM returns an empty response for the requested date, the application MUST search
   backward for the most recent available official rate date within 14 calendar days.
 - **FR-020**: The application MUST use the latest available previous official rate for weekends or
   public holidays and inform the user that the effective date differs from the requested date.
-- **FR-021**: The application MUST safely handle malformed XML, missing required fields, invalid
-  nominal values, invalid exchange rates, and missing selected currencies.
+- **FR-021**: The application MUST reject the entire XML response when XML is malformed, required
+  fields are missing, nominal or exchange values are invalid, or required currency fields are
+  incomplete. It MUST NOT mix valid entries from a partially valid response with cache data or
+  another response.
 - **FR-022**: The application MUST save every successfully parsed and validated BNM response locally.
 - **FR-023**: Cached rates MUST remain available after application restarts.
 - **FR-024**: Each cache entry MUST retain the effective rate date, retrieval timestamp, source,
@@ -237,9 +266,10 @@ validation feedback, result area, effective date, source, and cache/live state.
 - **SC-002**: A user can complete MDL-to-EUR conversion and a conversion between two non-MDL
   currencies using the documented formula.
 - **SC-003**: Same-currency conversion returns the entered positive amount consistently rounded to
-  two decimal places in 100% of tested valid cases.
+  two decimal places using Decimal `ROUND_HALF_UP` in 100% of tested valid cases.
 - **SC-004**: Empty, alphabetic, malformed, zero, negative, NaN, and infinite amounts are rejected
-  in 100% of tested cases with clear feedback.
+  in 100% of tested cases with clear feedback. Both comma and period decimal separators are
+  accepted when they form a valid single-decimal-separator amount.
 - **SC-005**: Network failure does not terminate the application or prevent it from showing an
   understandable error or cache state.
 - **SC-006**: A valid cache remains usable after application restart and is visibly identified as
@@ -250,6 +280,10 @@ validation feedback, result area, effective date, source, and cache/live state.
   source for conversions.
 - **SC-009**: Loading, validation, and rate-provenance feedback remain visible without freezing
   desktop interactions during network operations.
+- **SC-010**: Same-currency conversion completes with valid input without network access and does
+  not alter or depend on the loaded rate set.
+- **SC-011**: A malformed or partially valid XML response is rejected as a whole in 100% of tested
+  cases and does not overwrite the previous valid cache.
 
 ## Assumptions
 
